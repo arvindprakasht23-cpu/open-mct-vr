@@ -275,24 +275,21 @@ export function initIssVrScene(container) {
   controller1.add(new THREE.Line(laserGeo, laserMat));
   controller2.add(new THREE.Line(laserGeo, laserMat.clone()));
 
-  // In VR, project 3D Holographic Telemetry Tablets floating directly in front of the headset
+  // When entering WebXR VR, position camera rig near spacecraft without any obstructing 3D tablets
   renderer.xr.addEventListener('sessionstart', () => {
     console.log('[WebXR] Entered Immersive VR session on HMD!');
     if (cameraRig && craftGroup) {
       cameraRig.position.copy(craftGroup.position).add(new THREE.Vector3(2.5, 0.8, 3.2));
       cameraRig.lookAt(craftGroup.position);
     }
+    // Remove the dual 3D holographic tablets completely - keep space crystal clear as on website
     if (hudPlane1) {
-      hudPlane1.visible = true;
-      hudPlane1.position.set(-0.85, 0.0, -1.6);
-      hudPlane1.scale.set(0.35, 0.35, 0.35);
-      cameraRig.add(hudPlane1);
+      hudPlane1.visible = false;
+      if (hudPlane1.parent) hudPlane1.parent.remove(hudPlane1);
     }
     if (hudPlane2) {
-      hudPlane2.visible = true;
-      hudPlane2.position.set(0.85, 0.0, -1.6);
-      hudPlane2.scale.set(0.35, 0.35, 0.35);
-      cameraRig.add(hudPlane2);
+      hudPlane2.visible = false;
+      if (hudPlane2.parent) hudPlane2.parent.remove(hudPlane2);
     }
   });
 
@@ -302,8 +299,11 @@ export function initIssVrScene(container) {
     if (hudPlane2) hudPlane2.visible = false;
   });
 
-  // WebXR Enter VR Button
-  const vrButton = VRButton.createButton(renderer);
+  // WebXR Enter VR Button with DOM Overlay so the website HUD and UI overlay cleanly
+  const vrButton = VRButton.createButton(renderer, {
+    optionalFeatures: ['dom-overlay'],
+    domOverlay: { root: document.body }
+  });
   vrButton.id = 'webxr-enter-btn';
   vrButton.style.position = 'fixed';
   vrButton.style.bottom = '75px';
@@ -2333,6 +2333,7 @@ function createFloatingHoloHUD() {
   // All telemetry is crisply displayed in the right-side pinned HUD card
   hudPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.4), hudMat1);
   hudPlane1.position.set(-2.8, 1.1, 0);
+  hudPlane1.visible = false;
   // craftGroup.add(hudPlane1); // Removed floating HUD clutter
 
   // Panel 2: Live Ground Track & Planetary Coordinates
@@ -2351,6 +2352,7 @@ function createFloatingHoloHUD() {
 
   hudPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.4), hudMat2);
   hudPlane2.position.set(2.8, 1.1, 0);
+  hudPlane2.visible = false;
   // craftGroup.add(hudPlane2); // Removed floating HUD clutter
 
   drawHoloHUD();
