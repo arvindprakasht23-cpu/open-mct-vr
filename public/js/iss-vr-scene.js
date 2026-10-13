@@ -2994,22 +2994,35 @@ function render(timestamp, frame) {
     controls.update();
   }
 
-  // WebXR 6-DoF Thumbstick Flying in Meta Quest / VR Headsets
+  // WebXR 6-DoF Flight & Smooth Rotation in Meta Quest / VR Headsets
   if (renderer.xr.isPresenting && cameraRig) {
     const session = renderer.xr.getSession();
     if (session && session.inputSources) {
       for (const source of session.inputSources) {
         if (source.gamepad && source.gamepad.axes) {
           const axes = source.gamepad.axes;
-          const stickX = axes[2] !== undefined ? axes[2] : (axes[0] || 0);
-          const stickY = axes[3] !== undefined ? axes[3] : (axes[1] || 0);
-          if (Math.abs(stickX) > 0.12 || Math.abs(stickY) > 0.12) {
-            const forward = new THREE.Vector3();
-            camera.getWorldDirection(forward);
-            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-            const flySpeed = 0.55;
-            cameraRig.position.addScaledVector(forward, -stickY * flySpeed);
-            cameraRig.position.addScaledVector(right, stickX * flySpeed);
+          // Standard WebXR Gamepad mapping: axes[2] is Thumbstick X, axes[3] is Thumbstick Y
+          const stickX = axes.length >= 4 ? axes[2] : (axes[0] || 0);
+          const stickY = axes.length >= 4 ? axes[3] : (axes[1] || 0);
+
+          if (source.handedness === 'right') {
+            // Right Thumbstick: Smooth 360° Rotation (Yaw) & Vertical Elevation (Up/Down)
+            if (Math.abs(stickX) > 0.12) {
+              cameraRig.rotation.y -= stickX * 0.04;
+            }
+            if (Math.abs(stickY) > 0.12) {
+              cameraRig.position.y -= stickY * 0.45;
+            }
+          } else {
+            // Left Thumbstick: Free Flight (Forward/Backward & Strafe Left/Right)
+            if (Math.abs(stickX) > 0.12 || Math.abs(stickY) > 0.12) {
+              const forward = new THREE.Vector3();
+              camera.getWorldDirection(forward);
+              const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+              const flySpeed = 0.65;
+              cameraRig.position.addScaledVector(forward, -stickY * flySpeed);
+              cameraRig.position.addScaledVector(right, stickX * flySpeed);
+            }
           }
         }
       }
