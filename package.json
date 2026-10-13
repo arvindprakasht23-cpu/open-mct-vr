@@ -1,0 +1,29 @@
+{
+  "name": "open-mct-vr-openspace",
+  "version": "1.0.0",
+  "description": "Virtual Reality Mission Control: Integrating NASA Open MCT with OpenSpace 3D Engine",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "mock-openspace": "node mock-openspace.js"
+  },
+  "keywords": [
+    "openmct",
+    "openspace",
+    "vr",
+    "virtual-reality",
+    "mission-control",
+    "telemetry",
+    "nasa"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "express": "^4.19.2",
+    "openmct": "^4.3.1",
+    "satellite.js": "^7.1.0",
+    "three": "^0.186.1",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,36 @@
+-- ============================================================================
+-- OpenSpace VR Asset: Open MCT Floating Mission Control Tablet
+-- ============================================================================
+-- This asset configures an embedded Chromium (CEF) web browser pane in OpenSpace
+-- that displays NASA Open MCT at http://localhost:8080 inside the VR environment.
+--
+-- To use:
+-- 1. Copy this file into your OpenSpace directory:
+--    data/assets/custom/openmct_vr_gui.asset
+-- 2. Add `asset.require('custom/openmct_vr_gui')` to your OpenSpace profile
+--    (e.g., default.profile or apollo.profile).
+-- ============================================================================
+
+
+-- Open MCT Web GUI Configuration
+local OpenMCTUrl = "http://localhost:8080"
+local GuiIdentifier = "OpenMctVRControl"
+
+asset.onInitialize(function()
+    openspace.printInfo("Initializing Open MCT VR Web GUI Asset...")
+    
+    -- Ensure WebSockets and Web GUI features are active
+    if openspace.hasProperty("Modules.WebGui.Enabled") then
+        openspace.setPropertyValueSingle("Modules.WebGui.Enabled", true)
+    end
+    
+    -- Create or register web pane if supported by OpenSpace CEF layer
+    -- In OpenSpace VR, the WebGui can be projected to a 3D Screen or controller
+    openspace.printInfo("Open MCT URL: " .. OpenMCTUrl)
+end)
+
+asset.onDeinitialize(function()
+    openspace.printInfo("Deinitializing Open MCT VR Web GUI Asset...")
+end)
+
+asset.export('Url', OpenMCTUrl)

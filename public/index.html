@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NASA Open MCT VR | Real-Time Spacecraft Tracking (Earth & Moon)</title>
+  
+  <!-- Open MCT Built-in Styles -->
+  <link rel="stylesheet" href="/openmct-dist/openmct.css">
+  <link rel="stylesheet" href="/openmct-dist/darkmatterTheme.css">
+
+  <!-- Custom High-Contrast VR HUD Styles -->
+  <link rel="stylesheet" href="/css/vr-hud.css">
+
+  <!-- Three.js & Satellite.js Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/three/build/three.module.js",
+        "three/addons/": "/three/examples/jsm/",
+        "satellite.js": "/satellite-dist/index.js"
+      }
+    }
+  </script>
+
+  <style>
+    /* 3D Scene Viewport */
+    #vr-scene-container {
+      position: absolute;
+      top: 52px;
+      bottom: 56px;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: radial-gradient(circle at center, #050b18 0%, #010308 100%);
+      overflow: hidden;
+      display: block;
+    }
+
+    #app {
+      display: none;
+    }
+
+    .view-active-3d #vr-scene-container {
+      display: block;
+    }
+    .view-active-3d #app {
+      display: none;
+    }
+
+    .view-active-2d #vr-scene-container {
+      display: none;
+    }
+    .view-active-2d #app {
+      display: block;
+    }
+
+    /* 3D View Helper Hint */
+    #vr-instructions-hint {
+      position: absolute;
+      top: 18px;
+      left: 20px;
+      background: rgba(10, 18, 36, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: #94a3b8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      pointer-events: none;
+      z-index: 150;
+      line-height: 1.5;
+    }
+
+    #vr-instructions-hint span {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="view-active-3d">
+
+  <!-- VR Mission Control Top Bar -->
+  <header id="vr-control-bar">
+    <div class="vr-brand">
+      <span class="vr-logo-badge" id="fleet-badge">NASA FLEET</span>
+      <div>
+        <div class="vr-title" id="craft-title">International Space Station (NORAD #25544)</div>
+        <div class="vr-sub-title" id="openspace-anchor-label">LIVE SGP4 REAL-TIME TELEMETRY | EARTH ORBIT</div>
+      </div>
+    </div>
+
+    <!-- Active Satellite Selection Menu -->
+    <div class="vr-selector-group">
+      <span style="font-size:11px; color:#94a3b8; font-weight:700; letter-spacing:0.5px;">TARGET:</span>
+      <select id="satellite-selector" class="vr-select">
+        <optgroup label="🌍 Earth Orbit Fleet">
+          <option value="iss" selected>🛰️ ISS (Zarya) - Space Station</option>
+          <option value="hst">🔭 Hubble Space Telescope (HST)</option>
+          <option value="starlink">📡 Starlink-G4-1 Constellation</option>
+          <option value="tiangong">🏮 Tiangong Space Station (CSS)</option>
+          <option value="noaa20">🌦️ NOAA-20 Polar Weather Sat</option>
+          <option value="jwst">🌌 James Webb Space Telescope (JWST)</option>
+          <option value="terra">🌿 Terra Earth Observer (EOS)</option>
+          <option value="gps-iir">📍 GPS Block IIR-M (PRN-11)</option>
+        </optgroup>
+        <optgroup label="🌕 Lunar Orbit Fleet">
+          <option value="lro">🌕 LRO (Lunar Reconnaissance Orbiter)</option>
+          <option value="chandrayaan2">🇮🇳 Chandrayaan-2 Lunar Orbiter</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- 3D Mission Control Status Indicator -->
+    <div class="vr-openspace-badge" id="openspace-status-badge" title="WebXR 3D Real-Time Physics Engine">
+      <span class="status-dot connected" id="openspace-status-dot"></span>
+      <span id="openspace-status-text">3D WEBXR: ACTIVE (60 FPS)</span>
+    </div>
+
+    <!-- View Mode Switcher: 3D VR Scene vs 2D Charts -->
+    <div class="vr-actions">
+      <button class="vr-btn vr-btn-primary" id="btn-toggle-view" title="Toggle between 3D Space View and 2D Open MCT Telemetry">
+        📊 2D CHARTS
+      </button>
+      <button class="vr-btn" id="btn-toggle-hud" title="Toggle Live Telemetry Pop-up Panel">
+        🛰️ LIVE HUD
+      </button>
+
+      <button class="vr-btn" id="btn-focus-sun" title="Focus 3D camera on the Sun">
+        ☀️ SUN
+      </button>
+      <button class="vr-btn" id="btn-focus-mercury" title="Focus 3D camera on Mercury">
+        ☿ MERCURY
+      </button>
+      <button class="vr-btn" id="btn-focus-venus" title="Focus 3D camera on Venus">
+        ♀ VENUS
+      </button>
+      <button class="vr-btn" id="btn-focus-earth" title="Focus 3D camera on Earth">
+        🌍 EARTH
+      </button>
+      <button class="vr-btn" id="btn-focus-moon" title="Focus 3D camera on Moon">
+        🌕 MOON
+      </button>
+      <button class="vr-btn" id="btn-focus-mars" title="Focus 3D camera on Mars & Moons (Phobos & Deimos)">
+        🔴 MARS
+      </button>
+      <button class="vr-btn" id="btn-focus-asteroids" title="Focus 3D camera on the Main Asteroid Belt">
+        ☄️ ASTEROIDS
+      </button>
+      <button class="vr-btn" id="btn-focus-jupiter" title="Focus 3D camera on Jupiter & Galilean Moons">
+        ⚡ JUPITER
+      </button>
+      <button class="vr-btn" id="btn-focus-saturn" title="Focus 3D camera on Saturn & Ring System">
+        🪐 SATURN
+      </button>
+      <button class="vr-btn" id="btn-focus-uranus" title="Focus 3D camera on Uranus & Rings">
+        🔵 URANUS
+      </button>
+      <button class="vr-btn" id="btn-focus-neptune" title="Focus 3D camera on Neptune & Triton">
+        ♆ NEPTUNE
+      </button>
+      <button class="vr-btn" id="btn-focus-craft" title="Focus 3D camera on active spacecraft">
+        🛰️ CRAFT
+      </button>
+      <button class="vr-btn" id="btn-toggle-vr" title="Toggle Fullscreen">
+        ⛶ FULLSCREEN
+      </button>
+      <button class="vr-btn" id="btn-quest-info" title="Connect Meta Quest or any WebXR Headset" style="background: linear-gradient(135deg, #059669, #10b981); border: 1px solid #34d399; font-weight: 700; color: #ffffff; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);">
+        🥽 META QUEST VR
+      </button>
+    </div>
+  </header>
+
+  <!-- 1. 3D WebXR Space Scene Viewport (Default View) -->
+  <div id="vr-scene-container">
+    <div id="vr-instructions-hint">
+      🎮 <span>DESKTOP:</span> Click & Drag to Rotate | Scroll to Zoom | Right-Click to Pan<br>
+      🌌 <span>EXPLORE:</span> Click CRAFT, EARTH, MOON, MARS, JUPITER, SATURN, or SUN to navigate the cosmos<br>
+      🥽 <span>VR HEADSET:</span> Click "ENTER VR" Below for Full WebXR Immersion | Trigger to Cycle Targets
+    </div>
+
+    <!-- Pinned High-Contrast Telemetry Card (Pops Up When Satellite is Focused) -->
+    <div id="vr-telemetry-hud-card" class="card-minimized">
+      <div class="hud-card-header">
+        <div class="hud-header-left">
+          <span class="hud-badge" id="hud-card-badge">LIVE SGP4</span>
+          <span class="hud-craft-name" id="hud-card-craft">ISS (NORAD #25544)</span>
+          <span class="hud-click-hint">🛰️ CLICK SATELLITE</span>
+        </div>
+        <div class="hud-header-right">
+          <button id="btn-card-focus-craft" class="hud-btn-mini" title="Track & Center Camera on Spacecraft">🎯 TRACK</button>
+          <span class="hud-live-dot" title="Active Real-Time Physics Feed"></span>
+          <button id="btn-close-hud-card" class="hud-btn-close" title="Close Live Data Panel">✕</button>
+        </div>
+      </div>
+      <div class="hud-card-grid">
+        <div class="hud-metric">
+          <span class="hud-metric-label">ALTITUDE</span>
+          <span class="hud-metric-val val-cyan" id="card-alt">418.5 km</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-metric-label">VELOCITY</span>
+          <span class="hud-metric-val val-green" id="card-vel">7.661 km/s</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-metric-label">LATITUDE</span>
+          <span class="hud-metric-val val-amber" id="card-lat">2.7437° N</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-metric-label">LONGITUDE</span>
+          <span class="hud-metric-val val-amber" id="card-lon">85.6719° E</span>
+        </div>
+      </div>
+      <div class="hud-card-subgrid">
+        <div class="hud-submetric">
+          <span class="hud-sub-label">REGIME:</span>
+          <span class="hud-sub-val" id="card-regime">EARTH LEO</span>
+        </div>
+        <div class="hud-submetric">
+          <span class="hud-sub-label">INCLINATION:</span>
+          <span class="hud-sub-val" id="card-inc">51.64°</span>
+        </div>
+      </div>
+      <div class="hud-card-footer">
+        <span id="card-target-body">ANCHOR: EARTH LEO</span>
+        <span id="card-clock">REAL-TIME PROPAGATION</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Open MCT 2D Root Viewport -->
+  <div id="app"></div>
+
+  <!-- Floating VR Telemetry Quick-Dial Strip (Real Spacecraft Data) -->
+  <footer id="vr-telemetry-strip">
+    <div class="vr-strip-item">
+      <span class="vr-strip-label">ALTITUDE</span>
+      <span class="vr-strip-val" id="dial-alt">419.2 km</span>
+    </div>
+    <div class="vr-strip-divider"></div>
+
+    <div class="vr-strip-item">
+      <span class="vr-strip-label">SPEED</span>
+      <span class="vr-strip-val" id="dial-vel">7.665 km/s</span>
+    </div>
+    <div class="vr-strip-divider"></div>
+
+    <div class="vr-strip-item">
+      <span class="vr-strip-label">LATITUDE</span>
+      <span class="vr-strip-val" id="dial-lat">51.2400°</span>
+    </div>
+    <div class="vr-strip-divider"></div>
+
+    <div class="vr-strip-item">
+      <span class="vr-strip-label">LONGITUDE</span>
+      <span class="vr-strip-val" id="dial-lon">14.8500°</span>
+    </div>
+    <div class="vr-strip-divider"></div>
+
+    <div class="vr-strip-item">
+      <span class="vr-strip-label">LIGHTING</span>
+      <span class="vr-strip-val" id="dial-solar">DAYLIGHT</span>
+    </div>
+  </footer>
+
+  <!-- Open MCT Library Distribution -->
+  <script src="/openmct-dist/openmct.js"></script>
+
+  <!-- Custom Mission Telemetry & OpenSpace Bridge Plugins -->
+  <script src="/js/telemetry-provider.js"></script>
+  <script src="/js/plugins/openspace-sync.js"></script>
+  <script src="/js/plugins/vr-hud-overlay.js"></script>
+
+  <!-- Open MCT Application Bootstrap -->
+  <script src="/js/app.js"></script>
+
+  <!-- 3D WebXR ISS Space Engine Bootstrap -->
+  <script type="module">
+    import {
+      initIssVrScene,
+      selectSatellite,
+      focusCraftView,
+      focusSunView,
+      focusMercuryView,
+      focusVenusView,
+      focusEarthView,
+      focusMoonView,
+      focusMarsView,
+      focusAsteroidsView,
+      focusJupiterView,
+      focusSaturnView,
+      focusUranusView,
+      focusNeptuneView
+    } from '/js/iss-vr-scene.js';
+
+    // Initialize 3D WebXR space scene
+    const container = document.getElementById('vr-scene-container');
+    initIssVrScene(container);
+
+    // Pinned HUD Card UI Controls & Dynamic Pop-Up
+    const hudCard = document.getElementById('vr-telemetry-hud-card');
+    let userClosedHud = false;
+
+    function popOpenCraftTelemetry(force) {
+      if (!hudCard) return;
+      if (userClosedHud && !force) return;
+      hudCard.classList.remove('card-minimized', 'card-hidden');
+      hudCard.classList.add('card-popped-active');
+      const toggleBtn = document.getElementById('btn-toggle-hud');
+      if (toggleBtn) toggleBtn.classList.add('active');
+    }
+
+    function closeCraftTelemetry() {
+      if (!hudCard) return;
+      hudCard.classList.remove('card-popped-active', 'card-minimized');
+      hudCard.classList.add('card-hidden');
+      userClosedHud = true;
+      const toggleBtn = document.getElementById('btn-toggle-hud');
+      if (toggleBtn) toggleBtn.classList.remove('active');
+    }
+
+    function toggleCraftTelemetry() {
+      if (!hudCard) return;
+      if (hudCard.classList.contains('card-popped-active')) {
+        closeCraftTelemetry();
+      } else {
+        userClosedHud = false;
+        popOpenCraftTelemetry(true);
+      }
+    }
+
+    const btnToggleHud = document.getElementById('btn-toggle-hud');
+    if (btnToggleHud) {
+      btnToggleHud.addEventListener('click', toggleCraftTelemetry);
+    }
+
+    // Target Satellite Selector listener
+    const satSelector = document.getElementById('satellite-selector');
+    satSelector.addEventListener('change', function (e) {
+      const selectedId = e.target.value;
+      selectSatellite(selectedId);
+      userClosedHud = false;
+      popOpenCraftTelemetry(true);
+
+      // Notify WebSocket server of active satellite change
+      fetch('/api/satellites')
+        .then(res => res.json())
+        .catch(() => {});
+    });
+
+    // When spacecraft is focused, pop open the live telemetry card!
+    window.addEventListener('craft-focused', function () {
+      popOpenCraftTelemetry(false);
+    });
+
+    // When looking at other planets/celestial bodies, minimize card if not closed
+    window.addEventListener('camera-focus-changed', function (e) {
+      if (userClosedHud) return;
+      if (e.detail && e.detail.body !== 'craft') {
+        if (hudCard) {
+          hudCard.classList.remove('card-popped-active');
+          hudCard.classList.add('card-minimized');
+        }
+      } else {
+        popOpenCraftTelemetry(false);
+      }
+    });
+
+    // Clicking the card when minimized immediately focuses spacecraft and pops it open!
+    if (hudCard) {
+      hudCard.addEventListener('click', function () {
+        if (hudCard.classList.contains('card-minimized')) {
+          userClosedHud = false;
+          focusCraftView();
+          popOpenCraftTelemetry(true);
+        }
+      });
+    }
+
+    // When satellite is clicked in 3D scene, pop up with effect!
+    window.addEventListener('satellite-3d-clicked', function (e) {
+      userClosedHud = false;
+      popOpenCraftTelemetry(true);
+      if (hudCard) {
+        hudCard.style.boxShadow = '0 0 60px rgba(56,189,248,0.9), 0 0 25px rgba(16,185,129,0.8), inset 0 0 30px rgba(56,189,248,0.2)';
+        hudCard.style.borderColor = '#38bdf8';
+        setTimeout(() => {
+          hudCard.style.boxShadow = '';
+          hudCard.style.borderColor = '';
+        }, 1200);
+      }
+    });
+
+    // Mini track button on HUD card
+    const btnCardFocus = document.getElementById('btn-card-focus-craft');
+    if (btnCardFocus) {
+      btnCardFocus.addEventListener('click', function (e) {
+        e.stopPropagation();
+        focusCraftView();
+        popOpenCraftTelemetry(true);
+      });
+    }
+
+    // ✕ Close button — user can dismiss live data panel completely
+    const btnCloseHud = document.getElementById('btn-close-hud-card');
+    if (btnCloseHud) {
+      btnCloseHud.addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeCraftTelemetry();
+      });
+    }
+
+    // Pinned HUD Card Live Sync
+    window.addEventListener('vr-telemetry-update', function (e) {
+      const detail = e.detail;
+      if (!detail) return;
+      const curId = satSelector.value;
+      const s = (detail.fleet && detail.fleet[curId]) || {};
+      const isMoon = (curId === 'lro' || curId === 'chandrayaan2');
+
+      const cardCraft = document.getElementById('hud-card-craft');
+      const cardAlt = document.getElementById('card-alt');
+      const cardVel = document.getElementById('card-vel');
+      const cardLat = document.getElementById('card-lat');
+      const cardLon = document.getElementById('card-lon');
+      const cardRegime = document.getElementById('card-regime');
+      const cardInc = document.getElementById('card-inc');
+      const cardAnchor = document.getElementById('card-target-body');
+      const cardClock = document.getElementById('card-clock');
+
+      if (cardCraft) cardCraft.innerText = satSelector.options[satSelector.selectedIndex].text;
+      if (cardAlt && s.altitude !== undefined) cardAlt.innerText = `${s.altitude} km`;
+      if (cardVel && s.velocity_kms !== undefined) cardVel.innerText = `${s.velocity_kms} km/s`;
+      if (cardLat && s.latitude !== undefined) cardLat.innerText = `${Number(s.latitude).toFixed(4)}°`;
+      if (cardLon && s.longitude !== undefined) cardLon.innerText = `${Number(s.longitude).toFixed(4)}°`;
+      if (cardRegime) cardRegime.innerText = isMoon ? 'LUNAR POLAR ORBIT' : 'LOW EARTH ORBIT (LEO)';
+      if (cardInc && s.inclination !== undefined) cardInc.innerText = `${Number(s.inclination).toFixed(2)}°`;
+      if (cardAnchor) cardAnchor.innerText = isMoon ? 'ANCHOR: MOON ORBIT' : 'ANCHOR: EARTH LEO';
+      if (cardClock) {
+        const d = new Date(detail.timestamp || Date.now());
+        cardClock.innerText = `${d.toISOString().substring(11, 19)} UTC`;
+      }
+    });
+
+    // Camera preset listeners
+    document.getElementById('btn-focus-sun').addEventListener('click', focusSunView);
+    document.getElementById('btn-focus-mercury').addEventListener('click', focusMercuryView);
+    document.getElementById('btn-focus-venus').addEventListener('click', focusVenusView);
+    document.getElementById('btn-focus-earth').addEventListener('click', focusEarthView);
+    document.getElementById('btn-focus-moon').addEventListener('click', focusMoonView);
+    document.getElementById('btn-focus-mars').addEventListener('click', focusMarsView);
+    document.getElementById('btn-focus-asteroids').addEventListener('click', focusAsteroidsView);
+    document.getElementById('btn-focus-jupiter').addEventListener('click', focusJupiterView);
+    document.getElementById('btn-focus-saturn').addEventListener('click', focusSaturnView);
+    document.getElementById('btn-focus-uranus').addEventListener('click', focusUranusView);
+    document.getElementById('btn-focus-neptune').addEventListener('click', focusNeptuneView);
+    document.getElementById('btn-focus-craft').addEventListener('click', function () {
+      focusCraftView();
+      popOpenCraftTelemetry();
+    });
+
+    // Fullscreen toggle
+    document.getElementById('btn-toggle-vr').addEventListener('click', function () {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // View mode toggle (3D Space Scene vs 2D Open MCT)
+    const btnToggle = document.getElementById('btn-toggle-view');
+    let is3dMode = true;
+
+    btnToggle.addEventListener('click', function () {
+      is3dMode = !is3dMode;
+      if (is3dMode) {
+        document.body.className = 'view-active-3d';
+        btnToggle.innerText = '📊 SWITCH TO 2D CHARTS';
+        btnToggle.style.background = 'linear-gradient(135deg, rgba(2, 132, 199, 0.4), rgba(37, 99, 235, 0.4))';
+      } else {
+        document.body.className = 'view-active-2d';
+        btnToggle.innerText = '🚀 SWITCH TO 3D VR VIEW';
+        btnToggle.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.5), rgba(5, 150, 105, 0.5))';
+        // Auto-navigate Open MCT to the selected spacecraft's live telemetry table!
+        const curSat = (satSelector && satSelector.value) ? satSelector.value : 'iss';
+        window.location.hash = '#/browse/gateway.taxonomy/' + curSat + '.telemetry.table';
+      }
+    });
+
+    // OpenSpace Badge click handler: easily set VR PC IP if running across network
+    const osBadge = document.getElementById('openspace-status-badge');
+    if (osBadge) {
+      osBadge.addEventListener('click', function () {
+        const currentHost = new URLSearchParams(window.location.search).get('os_host') || 'localhost';
+        const newHost = prompt('OpenSpace Engine Host IP / Address (default: localhost, or enter your VR PC IP):', currentHost);
+        if (newHost && newHost !== currentHost) {
+          const u = new URL(window.location);
+          u.searchParams.set('os_host', newHost.trim());
+          window.location.href = u.toString();
+        }
+      });
+    }
+
+    // Meta Quest / WebXR Modal Logic
+    const questBtn = document.getElementById('btn-quest-info');
+    const questModal = document.getElementById('quest-modal');
+    const questModalClose = document.getElementById('quest-modal-close');
+    const questUrlDisplay = document.getElementById('quest-url-display');
+    const questUrlSnippet = document.getElementById('quest-url-snippet');
+
+    // Fetch local network IP from server
+    fetch('/api/network-info')
+      .then(r => r.json())
+      .then(info => {
+        if (info.questHttpsUrl && questUrlDisplay) {
+          questUrlDisplay.innerText = info.questHttpsUrl;
+          if (questUrlSnippet) questUrlSnippet.innerText = info.questHttpsUrl;
+        }
+      })
+      .catch(() => {});
+
+    if (questBtn && questModal) {
+      questBtn.addEventListener('click', () => {
+        questModal.style.display = 'flex';
+      });
+    }
+
+    if (questModalClose && questModal) {
+      questModalClose.addEventListener('click', () => {
+        questModal.style.display = 'none';
+      });
+    }
+
+    window.addEventListener('click', (e) => {
+      if (e.target === questModal) {
+        questModal.style.display = 'none';
+      }
+    });
+
+    // If user clicks the VR button on desktop, also guide them to Meta Quest
+    const vrEnterBtn = document.getElementById('webxr-enter-btn');
+    if (vrEnterBtn) {
+      vrEnterBtn.addEventListener('click', () => {
+        if (vrEnterBtn.innerText.includes('NOT AVAILABLE') && questModal) {
+          questModal.style.display = 'flex';
+        }
+      });
+    }
+  </script>
+
+  <!-- Meta Quest / VR Headset Connection Modal -->
+  <div id="quest-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(2, 6, 23, 0.88); backdrop-filter:blur(10px); z-index:99999; justify-content:center; align-items:center;">
+    <div style="background:#090d16; border:1px solid #38bdf8; border-radius:14px; width:92%; max-width:580px; padding:28px; box-shadow:0 0 50px rgba(56, 189, 248, 0.45); font-family:'Chakra Petch', sans-serif; color:#f8fafc; position:relative;">
+      <button id="quest-modal-close" style="position:absolute; top:16px; right:16px; background:transparent; border:none; color:#94a3b8; font-size:28px; cursor:pointer; line-height:1;">&times;</button>
+      <h2 style="margin:0 0 12px 0; font-size:22px; color:#38bdf8; display:flex; align-items:center; gap:10px;">
+        <span>🥽</span> Connect Meta Quest & WebXR HMD
+      </h2>
+      <p style="font-size:14px; color:#94a3b8; margin-bottom:18px; line-height:1.5;">
+        Step inside NASA Mission Control in true 6-DoF Virtual Reality through your headset's built-in browser (Meta Quest 2/3/Pro, Pico 4, Apple Vision Pro).
+      </p>
+
+      <div style="background:#0f172a; border:1px solid rgba(56,189,248,0.35); border-radius:10px; padding:16px; margin-bottom:20px;">
+        <div style="font-size:12px; color:#38bdf8; font-weight:700; text-transform:uppercase; margin-bottom:6px; letter-spacing:0.5px;">Meta Quest Browser HTTPS URL:</div>
+        <div id="quest-url-display" style="font-family:'JetBrains Mono', monospace; font-size:17px; color:#4ade80; background:#020617; padding:12px 14px; border-radius:6px; word-break:break-all; user-select:all; border:1px solid rgba(74,222,128,0.4); font-weight:700;">
+          https://10.113.116.63:8443
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px; font-size:13.5px; color:#cbd5e1; margin-bottom:22px; line-height:1.4;">
+        <div style="display:flex; gap:12px;">
+          <strong style="color:#38bdf8; min-width:22px;">1.</strong>
+          <span>Connect your Meta Quest to the <strong>same Wi-Fi network</strong> as this laptop.</span>
+        </div>
+        <div style="display:flex; gap:12px;">
+          <strong style="color:#38bdf8; min-width:22px;">2.</strong>
+          <span>Open the <strong>Meta Quest Browser</strong> in VR.</span>
+        </div>
+        <div style="display:flex; gap:12px;">
+          <strong style="color:#38bdf8; min-width:22px;">3.</strong>
+          <span>Type <strong style="color:#4ade80;" id="quest-url-snippet">https://10.113.116.63:8443</strong> into the address bar (tap "Advanced" &rarr; "Proceed" for the local SSL certificate).</span>
+        </div>
+        <div style="display:flex; gap:12px;">
+          <strong style="color:#38bdf8; min-width:22px;">4.</strong>
+          <span>Click the glowing blue <strong>"ENTER VR"</strong> button at the bottom of the screen!</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(2,132,199,0.15); border-left:4px solid #38bdf8; padding:12px 14px; font-size:13px; color:#93c5fd; border-radius:4px; line-height:1.4;">
+        🎮 <strong>In-Headset Controls:</strong><br>
+        &bull; <strong>Trigger:</strong> Pull your controller trigger to cycle satellites (ISS, Moon, Hubble, etc.).<br>
+        &bull; <strong>Thumbstick:</strong> Push the left thumbstick to fly freely in 360&deg; space around Earth!
+      </div>
+    </div>
+  </div>
+</body>
+</html>
