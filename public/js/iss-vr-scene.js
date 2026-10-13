@@ -15,6 +15,7 @@ let moonGroup, moonMesh, moonOrbitLine;
 let craftGroup, craftModelMesh, orbitLine, subSatPointer, groundTargetRing;
 let hudPlane1, hudTexture1, hudCanvas1, hudCtx1;
 let hudPlane2, hudTexture2, hudCanvas2, hudCtx2;
+let vrPopCard, vrPopTexture, vrPopCanvas, vrPopCtx;
 let sunLight, sunPointLight, sunMesh, sunCoronaMesh;
 let mercuryGroup, mercuryMesh;
 let venusGroup, venusMesh;
@@ -261,10 +262,12 @@ export function initIssVrScene(container) {
   // WebXR 6-DoF Controllers with Laser Pointers
   controller1 = renderer.xr.getController(0);
   controller1.addEventListener('select', onVRControllerSelect);
+  controller1.addEventListener('squeeze', onVRControllerSqueeze);
   cameraRig.add(controller1);
 
   controller2 = renderer.xr.getController(1);
   controller2.addEventListener('select', onVRControllerSelect);
+  controller2.addEventListener('squeeze', onVRControllerSqueeze);
   cameraRig.add(controller2);
 
   const laserGeo = new THREE.BufferGeometry().setFromPoints([
@@ -275,14 +278,14 @@ export function initIssVrScene(container) {
   controller1.add(new THREE.Line(laserGeo, laserMat));
   controller2.add(new THREE.Line(laserGeo, laserMat.clone()));
 
-  // When entering WebXR VR, position camera rig near spacecraft without any obstructing 3D tablets
+  // When entering WebXR VR, position camera rig near spacecraft and spawn sleek pop display
   renderer.xr.addEventListener('sessionstart', () => {
     console.log('[WebXR] Entered Immersive VR session on HMD!');
     if (cameraRig && craftGroup) {
       cameraRig.position.copy(craftGroup.position).add(new THREE.Vector3(2.5, 0.8, 3.2));
       cameraRig.lookAt(craftGroup.position);
     }
-    // Remove the dual 3D holographic tablets completely - keep space crystal clear as on website
+    // Remove the dual bulky 3D tablets
     if (hudPlane1) {
       hudPlane1.visible = false;
       if (hudPlane1.parent) hudPlane1.parent.remove(hudPlane1);
@@ -291,12 +294,22 @@ export function initIssVrScene(container) {
       hudPlane2.visible = false;
       if (hudPlane2.parent) hudPlane2.parent.remove(hudPlane2);
     }
+    // Attach single sleek pop display (exact replica of website HUD card)
+    if (vrPopCard) {
+      vrPopCard.visible = true;
+      cameraRig.add(vrPopCard);
+      drawVrPopCard();
+    }
   });
 
   renderer.xr.addEventListener('sessionend', () => {
     console.log('[WebXR] Exited Immersive VR session');
     if (hudPlane1) hudPlane1.visible = false;
     if (hudPlane2) hudPlane2.visible = false;
+    if (vrPopCard) {
+      vrPopCard.visible = false;
+      if (vrPopCard.parent) vrPopCard.parent.remove(vrPopCard);
+    }
   });
 
   // WebXR Enter VR Button with DOM Overlay so the website HUD and UI overlay cleanly
@@ -373,8 +386,8 @@ export function initIssVrScene(container) {
   createGroundTrackPointer();
   buildCraft3DModel(currentSatId);
 
-  // 8. Floating 3D Holographic HUD
-  createFloatingHoloHUD();
+  // 8. VR Mission Control Pop Display (Mirrors Website HUD Card)
+  createVrPopCard();
 
   // 9. Interactive 3D Click / Tap Raycaster
   const raycaster = new THREE.Raycaster();
@@ -2311,230 +2324,186 @@ function buildCraft3DModel(satId) {
 }
 
 /**
- * Floating 3D Holographic Telemetry HUD
- * High-Contrast Solid OLED Glass with Crisp White and Neon Text
+ * VR Pop Display (Exact Replica of Website HUD Card #vr-telemetry-hud-card)
+ * Semi-transparent dark glassmorphism, high contrast, positioned in right peripheral view
  */
-function createFloatingHoloHUD() {
-  // Panel 1: Flight Telemetry
-  hudCanvas1 = document.createElement('canvas');
-  hudCanvas1.width = 1024;
-  hudCanvas1.height = 640;
-  hudCtx1 = hudCanvas1.getContext('2d');
-  hudTexture1 = new THREE.CanvasTexture(hudCanvas1);
+function createVrPopCard() {
+  vrPopCanvas = document.createElement('canvas');
+  vrPopCanvas.width = 1024;
+  vrPopCanvas.height = 700;
+  vrPopCtx = vrPopCanvas.getContext('2d');
+  vrPopTexture = new THREE.CanvasTexture(vrPopCanvas);
 
-  const hudMat1 = new THREE.MeshBasicMaterial({
-    map: hudTexture1,
+  const mat = new THREE.MeshBasicMaterial({
+    map: vrPopTexture,
     transparent: true,
-    opacity: 0.98,
+    opacity: 0.94,
     side: THREE.DoubleSide
   });
 
-  // Compact size: 3.8 x 2.4 - Floating HUDs disabled per user request:
-  // All telemetry is crisply displayed in the right-side pinned HUD card
-  hudPlane1 = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.4), hudMat1);
-  hudPlane1.position.set(-2.8, 1.1, 0);
-  hudPlane1.visible = false;
-  // craftGroup.add(hudPlane1); // Removed floating HUD clutter
+  vrPopCard = new THREE.Mesh(new THREE.PlaneGeometry(1.38, 0.94), mat);
+  // Positioned in right peripheral view (never blocking the spacecraft or planets)
+  vrPopCard.position.set(0.85, 0.28, -1.75);
+  vrPopCard.rotation.set(0, -0.24, 0);
+  vrPopCard.visible = false;
 
-  // Panel 2: Live Ground Track & Planetary Coordinates
-  hudCanvas2 = document.createElement('canvas');
-  hudCanvas2.width = 1024;
-  hudCanvas2.height = 640;
-  hudCtx2 = hudCanvas2.getContext('2d');
-  hudTexture2 = new THREE.CanvasTexture(hudCanvas2);
-
-  const hudMat2 = new THREE.MeshBasicMaterial({
-    map: hudTexture2,
-    transparent: true,
-    opacity: 0.98,
-    side: THREE.DoubleSide
-  });
-
-  hudPlane2 = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.4), hudMat2);
-  hudPlane2.position.set(2.8, 1.1, 0);
-  hudPlane2.visible = false;
-  // craftGroup.add(hudPlane2); // Removed floating HUD clutter
-
-  drawHoloHUD();
+  drawVrPopCard();
 }
 
 /**
- * Render High-Contrast Holographic HUD Panels
- * Designed for 100% legibility against both deep black space and brightly illuminated planets
+ * Handle VR Controller Grip / Squeeze Button (Toggle VR Pop Display)
  */
-function drawHoloHUD() {
-  const sat = SATELLITES[currentSatId];
+function onVRControllerSqueeze() {
+  if (vrPopCard) {
+    vrPopCard.visible = !vrPopCard.visible;
+    console.log('[WebXR] Toggled VR Pop Display visibility:', vrPopCard.visible);
+  }
+}
+
+/**
+ * Render High-Contrast VR Pop Display (Exact Replica of Website Card)
+ */
+function drawVrPopCard() {
+  if (!vrPopCtx || !vrPopTexture) return;
+
+  const sat = SATELLITES[currentSatId] || SATELLITES['iss'];
   const isMoon = sat.body === 'moon';
 
-  // === HUD PANEL 1: FLIGHT TELEMETRY ===
-  hudCtx1.clearRect(0, 0, 1024, 640);
+  vrPopCtx.clearRect(0, 0, 1024, 700);
 
-  // High-Contrast Solid OLED Background (96% opaque dark navy/black)
-  hudCtx1.fillStyle = 'rgba(2, 6, 18, 0.96)';
-  hudCtx1.roundRect(10, 10, 1004, 620, 18);
-  hudCtx1.fill();
+  // 1. Semi-Transparent Glassmorphic Card Background (Matches #vr-telemetry-hud-card)
+  vrPopCtx.fillStyle = 'rgba(6, 12, 28, 0.84)';
+  vrPopCtx.roundRect(10, 10, 1004, 680, 22);
+  vrPopCtx.fill();
 
-  // Intense Glowing Neon Border
-  hudCtx1.strokeStyle = sat.color;
-  hudCtx1.lineWidth = 4;
-  hudCtx1.stroke();
+  // Glowing Cyan Neon Border
+  vrPopCtx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+  vrPopCtx.lineWidth = 3;
+  vrPopCtx.stroke();
 
-  // Header Banner
-  hudCtx1.fillStyle = 'rgba(15, 23, 42, 0.95)';
-  hudCtx1.fillRect(14, 14, 996, 85);
-  hudCtx1.fillStyle = sat.color;
-  hudCtx1.font = 'bold 32px "Chakra Petch", sans-serif';
-  hudCtx1.fillText(`LIVE TELEMETRY: ${sat.name}`, 36, 60);
+  // 2. Header Bar
+  vrPopCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  vrPopCtx.fillRect(14, 14, 996, 90);
 
-  // Time stamp & status
-  const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-  hudCtx1.fillStyle = '#facc15';
-  hudCtx1.font = 'bold 18px "JetBrains Mono", monospace';
-  hudCtx1.fillText(`NORAD #${sat.norad} | ${isMoon ? '🌕 LUNAR ORBIT' : '🌍 EARTH LEO'} | SGP4 REAL-TIME: ${nowIso}`, 36, 125);
+  // Live SGP4 Badge
+  vrPopCtx.fillStyle = '#0284c7';
+  vrPopCtx.roundRect(32, 34, 130, 48, 8);
+  vrPopCtx.fill();
+  vrPopCtx.strokeStyle = '#38bdf8';
+  vrPopCtx.lineWidth = 1.5;
+  vrPopCtx.stroke();
 
-  // High-Contrast Metric Box Renderer
-  const drawMetricBox = (ctx, label, val, unit, x, y, w, h) => {
-    ctx.fillStyle = 'rgba(11, 20, 38, 0.95)';
-    ctx.roundRect(x, y, w, h, 10);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  vrPopCtx.fillStyle = '#ffffff';
+  vrPopCtx.font = 'bold 20px "Chakra Petch", sans-serif';
+  vrPopCtx.fillText('LIVE SGP4', 45, 66);
 
-    // High-visibility cyan label
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 18px "Chakra Petch", sans-serif';
-    ctx.fillText(label, x + 18, y + 36);
+  // Spacecraft Name
+  vrPopCtx.fillStyle = '#ffffff';
+  vrPopCtx.font = 'bold 30px "Chakra Petch", sans-serif';
+  vrPopCtx.fillText(sat.name, 180, 68);
 
-    // Ultra-bright bold white value
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px "Chakra Petch", sans-serif';
-    ctx.fillText(`${val} ${unit}`, x + 18, y + 84);
+  // Pulsing Green Live Dot + Tracking indicator
+  vrPopCtx.fillStyle = '#10b981';
+  vrPopCtx.beginPath();
+  vrPopCtx.arc(960, 58, 10, 0, Math.PI * 2);
+  vrPopCtx.fill();
+
+  vrPopCtx.font = 'bold 16px "JetBrains Mono", monospace';
+  vrPopCtx.fillText('TRACKING', 860, 64);
+
+  // 3. Four Metric Boxes (2x2 Grid)
+  const drawCardBox = (label, val, unit, color, x, y, w, h) => {
+    vrPopCtx.fillStyle = 'rgba(11, 20, 38, 0.85)';
+    vrPopCtx.roundRect(x, y, w, h, 14);
+    vrPopCtx.fill();
+    vrPopCtx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+    vrPopCtx.lineWidth = 2;
+    vrPopCtx.stroke();
+
+    // Metric Label
+    vrPopCtx.fillStyle = '#94a3b8';
+    vrPopCtx.font = 'bold 18px "Chakra Petch", sans-serif';
+    vrPopCtx.fillText(label, x + 20, y + 36);
+
+    // Metric Value
+    vrPopCtx.fillStyle = color;
+    vrPopCtx.font = 'bold 38px "Chakra Petch", sans-serif';
+    vrPopCtx.fillText(`${val} ${unit}`.trim(), x + 20, y + 88);
   };
 
-  const alt = activeTelemetry.altitude || 420.0;
-  const vKms = activeTelemetry.velocity_kms || 7.66;
-  const vKmh = activeTelemetry.velocity_kmh || (vKms * 3600);
-  const lat = (activeTelemetry.latitude || 0).toFixed(4);
-  const lon = (activeTelemetry.longitude || 0).toFixed(4);
+  const alt = activeTelemetry.altitude !== undefined ? `${activeTelemetry.altitude}` : '418.5';
+  const vel = activeTelemetry.velocity_kms !== undefined ? `${activeTelemetry.velocity_kms}` : '7.661';
+  const lat = (activeTelemetry.latitude !== undefined ? Number(activeTelemetry.latitude).toFixed(4) : '2.7437') + '°';
+  const lon = (activeTelemetry.longitude !== undefined ? Number(activeTelemetry.longitude).toFixed(4) : '85.6719') + '°';
 
-  drawMetricBox(hudCtx1, isMoon ? 'LUNAR ALTITUDE' : 'ORBITAL ALTITUDE', alt, 'KM', 36, 155, 450, 115);
-  drawMetricBox(hudCtx1, 'ORBITAL VELOCITY', vKms, 'KM/S', 530, 155, 450, 115);
+  // Box 1: Altitude (Cyan)
+  drawCardBox('ALTITUDE', alt, 'KM', '#38bdf8', 32, 125, 465, 115);
+  // Box 2: Velocity (Neon Green)
+  drawCardBox('VELOCITY', vel, 'KM/S', '#10b981', 525, 125, 465, 115);
+  // Box 3: Latitude (Amber)
+  drawCardBox('LATITUDE', lat, '', '#facc15', 32, 260, 465, 115);
+  // Box 4: Longitude (Amber)
+  drawCardBox('LONGITUDE', lon, '', '#facc15', 525, 260, 465, 115);
 
-  drawMetricBox(hudCtx1, 'ORBITAL SPEED', vKmh, 'KM/H', 36, 290, 450, 115);
-  drawMetricBox(hudCtx1, 'SOLAR ILLUMINATION', activeTelemetry.visibility || 'DAYLIGHT', '', 530, 290, 450, 115);
+  // 4. Sub-Metrics Bar
+  const isMoonText = isMoon ? 'LUNAR POLAR ORBIT' : 'LOW EARTH ORBIT (LEO)';
+  const incText = activeTelemetry.inclination ? `${Number(activeTelemetry.inclination).toFixed(2)}°` : '51.64°';
 
-  drawMetricBox(hudCtx1, isMoon ? 'SELENOGRAPHIC LAT' : 'SUB-SATELLITE LAT', `${lat}°`, '', 36, 425, 450, 115);
-  drawMetricBox(hudCtx1, isMoon ? 'SELENOGRAPHIC LON' : 'SUB-SATELLITE LON', `${lon}°`, '', 530, 425, 450, 115);
+  vrPopCtx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+  vrPopCtx.roundRect(32, 395, 465, 60, 10);
+  vrPopCtx.fill();
+  vrPopCtx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  vrPopCtx.lineWidth = 1;
+  vrPopCtx.stroke();
+  vrPopCtx.fillStyle = '#94a3b8';
+  vrPopCtx.font = 'bold 16px "JetBrains Mono", monospace';
+  vrPopCtx.fillText('REGIME: ' + isMoonText, 48, 432);
 
-  // Live Pulse Beacon
-  hudCtx1.fillStyle = '#22c55e';
-  hudCtx1.beginPath();
-  hudCtx1.arc(970, 52, 12, 0, Math.PI * 2);
-  hudCtx1.fill();
+  vrPopCtx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+  vrPopCtx.roundRect(525, 395, 465, 60, 10);
+  vrPopCtx.fill();
+  vrPopCtx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  vrPopCtx.lineWidth = 1;
+  vrPopCtx.stroke();
+  vrPopCtx.fillStyle = '#94a3b8';
+  vrPopCtx.font = 'bold 16px "JetBrains Mono", monospace';
+  vrPopCtx.fillText('INCLINATION: ' + incText, 545, 432);
 
-  hudTexture1.needsUpdate = true;
+  // 5. VR Controls Hint Bar
+  vrPopCtx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+  vrPopCtx.roundRect(32, 475, 960, 85, 12);
+  vrPopCtx.fill();
+  vrPopCtx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+  vrPopCtx.lineWidth = 1.5;
+  vrPopCtx.stroke();
 
-  // === HUD PANEL 2: 2D GROUND TRACK & RADAR ===
-  hudCtx2.clearRect(0, 0, 1024, 640);
+  vrPopCtx.fillStyle = '#38bdf8';
+  vrPopCtx.font = 'bold 18px "Chakra Petch", sans-serif';
+  vrPopCtx.fillText('🎮 VR CONTROLS:', 52, 515);
 
-  hudCtx2.fillStyle = 'rgba(2, 6, 18, 0.96)';
-  hudCtx2.roundRect(10, 10, 1004, 620, 18);
-  hudCtx2.fill();
-  hudCtx2.strokeStyle = sat.color;
-  hudCtx2.lineWidth = 4;
-  hudCtx2.stroke();
+  vrPopCtx.fillStyle = '#e2e8f0';
+  vrPopCtx.font = '16px "Chakra Petch", sans-serif';
+  vrPopCtx.fillText('Trigger: Next Craft  |  Grip: Hide/Show Card  |  Left Stick: Fly  |  Right Stick: 360° Rotate', 215, 515);
 
-  hudCtx2.fillStyle = 'rgba(15, 23, 42, 0.95)';
-  hudCtx2.fillRect(14, 14, 996, 85);
-  hudCtx2.fillStyle = sat.color;
-  hudCtx2.font = 'bold 32px "Chakra Petch", sans-serif';
-  hudCtx2.fillText(`PLANETARY RADAR & GROUND TRACK`, 36, 60);
+  vrPopCtx.fillStyle = '#94a3b8';
+  vrPopCtx.font = '14px "JetBrains Mono", monospace';
+  vrPopCtx.fillText('Spacecraft data synchronizes with NASA Open MCT real-time telemetry streams', 52, 542);
 
-  // Radar Viewport
-  const mapX = 36;
-  const mapY = 120;
-  const mapW = 952;
-  const mapH = 480;
+  // 6. Footer Clock Bar
+  const nowUtc = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+  vrPopCtx.fillStyle = '#38bdf8';
+  vrPopCtx.font = 'bold 16px "JetBrains Mono", monospace';
+  vrPopCtx.fillText(`ANCHOR: ${isMoon ? 'MOON POLAR ORBIT' : 'EARTH LEO'}`, 48, 620);
 
-  hudCtx2.fillStyle = '#010512';
-  hudCtx2.fillRect(mapX, mapY, mapW, mapH);
-  hudCtx2.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-  hudCtx2.lineWidth = 2;
-  hudCtx2.strokeRect(mapX, mapY, mapW, mapH);
+  vrPopCtx.fillStyle = '#facc15';
+  vrPopCtx.font = 'bold 16px "JetBrains Mono", monospace';
+  vrPopCtx.fillText(`PROPAGATION: ${nowUtc}`, 640, 620);
 
-  // Lat/Lon Grid Lines
-  hudCtx2.strokeStyle = 'rgba(56, 189, 248, 0.2)';
-  for (let i = 1; i < 6; i++) {
-    const y = mapY + (mapH / 6) * i;
-    hudCtx2.beginPath();
-    hudCtx2.moveTo(mapX, y);
-    hudCtx2.lineTo(mapX + mapW, y);
-    hudCtx2.stroke();
-  }
-  for (let i = 1; i < 12; i++) {
-    const x = mapX + (mapW / 12) * i;
-    hudCtx2.beginPath();
-    hudCtx2.moveTo(x, mapY);
-    hudCtx2.lineTo(x, mapY + mapH);
-    hudCtx2.stroke();
-  }
+  vrPopTexture.needsUpdate = true;
+}
 
-  // Continental / Lunar Basin outlines
-  hudCtx2.fillStyle = isMoon ? 'rgba(161, 161, 170, 0.35)' : 'rgba(34, 197, 94, 0.35)';
-  if (!isMoon) {
-    // Continents
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.28, mapY + mapH * 0.38, 70, 95, 0.2, 0, Math.PI * 2);
-    hudCtx2.fill();
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.35, mapY + mapH * 0.68, 55, 90, 0.1, 0, Math.PI * 2);
-    hudCtx2.fill();
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.55, mapY + mapH * 0.55, 60, 80, 0, 0, Math.PI * 2);
-    hudCtx2.fill();
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.68, mapY + mapH * 0.35, 110, 70, 0, 0, Math.PI * 2);
-    hudCtx2.fill();
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.82, mapY + mapH * 0.72, 45, 35, 0, 0, Math.PI * 2);
-    hudCtx2.fill();
-  } else {
-    // Lunar Maria
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.35, mapY + mapH * 0.45, 80, 70, 0, 0, Math.PI * 2);
-    hudCtx2.fill();
-    hudCtx2.beginPath();
-    hudCtx2.ellipse(mapX + mapW * 0.52, mapY + mapH * 0.42, 60, 50, 0, 0, Math.PI * 2);
-    hudCtx2.fill();
-  }
-
-  // Sub-Track Marker
-  const normX = ((parseFloat(lon) + 180) / 360);
-  const normY = ((90 - parseFloat(lat)) / 180);
-  const satTargetX = mapX + normX * mapW;
-  const satTargetY = mapY + normY * mapH;
-
-  // Ground Footprint Ring
-  hudCtx2.strokeStyle = sat.color;
-  hudCtx2.lineWidth = 2.5;
-  hudCtx2.fillStyle = `${sat.color}44`;
-  hudCtx2.beginPath();
-  hudCtx2.arc(satTargetX, satTargetY, 40, 0, Math.PI * 2);
-  hudCtx2.fill();
-  hudCtx2.stroke();
-
-  // Target Crosshair
-  hudCtx2.fillStyle = '#ffffff';
-  hudCtx2.beginPath();
-  hudCtx2.arc(satTargetX, satTargetY, 7, 0, Math.PI * 2);
-  hudCtx2.fill();
-
-  hudCtx2.fillStyle = '#f8fafc';
-  hudCtx2.font = 'bold 20px "JetBrains Mono", monospace';
-  hudCtx2.fillText(`${sat.id.toUpperCase()}: [${lat}°, ${lon}°]`, satTargetX + 20, satTargetY - 14);
-
-  hudTexture2.needsUpdate = true;
+function drawHoloHUD() {
+  drawVrPopCard();
 }
 
 /**
@@ -3041,5 +3010,9 @@ function onVRControllerSelect() {
   const nextIdx = (satKeys.indexOf(currentSatId) + 1) % satKeys.length;
   console.log('[WebXR Controller] Trigger pulled! Switching to next target:', satKeys[nextIdx]);
   selectSatellite(satKeys[nextIdx]);
+  if (vrPopCard) {
+    vrPopCard.visible = true;
+    drawVrPopCard();
+  }
 }
 
